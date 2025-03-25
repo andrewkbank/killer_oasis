@@ -12,6 +12,7 @@ from threading import Thread, Lock
 from collections import deque
 import datetime
 from PIL import ImageGrab
+from find_health_bar_aspect_ratio import count_hearts
 
 # Constants
 ACTION_KEYS = [
@@ -58,11 +59,26 @@ damage_detected = False
 damage_timer = None
 timeout_seconds = 5
 
+sct = mss.mss()
+monitor = sct.monitors[1]
+current_inventory_slot = 1
+current_health = -1
+def player_taking_damage():
+    # returns true if the player took damage
+    # we calculate this by seeing whether the updated health is less than the previous health
+    # there might be a more efficient way than taking another screenshot (we take 2 screenshots every frame), but idk and if it works it works
+    img = np.array(sct.grab(monitor))[:, :, :3]
+    updated_health = count_hearts(img)
+
+    took_damage =(updated_health<current_health)
+    current_health=updated_health
+    return took_damage
+
+def player_death():
+    # returns true if the player is dead
+    return (current_health==0)
 
 def record_screen():
-    sct = mss.mss()
-    monitor = sct.monitors[1]
-    
     while True:
         img = np.array(sct.grab(monitor))[:, :, :3]
         img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
@@ -140,6 +156,24 @@ def on_press(key):
                 if current_time - last_forward_press_time < double_tap_threshold:
                     actions.append({"time": current_time, "action": "sprint", "value": 1})
                 last_forward_press_time = current_time
+            elif action == "hotbar.1":
+                current_inventory_slot=1
+            elif action == "hotbar.2":
+                current_inventory_slot=2
+            elif action == "hotbar.3":
+                current_inventory_slot=3
+            elif action == "hotbar.4":
+                current_inventory_slot=4
+            elif action == "hotbar.5":
+                current_inventory_slot=5
+            elif action == "hotbar.6":
+                current_inventory_slot=6
+            elif action == "hotbar.7":
+                current_inventory_slot=7
+            elif action == "hotbar.8":
+                current_inventory_slot=8
+            elif action == "hotbar.9":
+                current_inventory_slot=9
     except AttributeError:
         pass
 
@@ -163,6 +197,12 @@ def on_move(x, y):
     actions.append({"time": time.time(), "action": "cameraX", "value": x})
     actions.append({"time": time.time(), "action": "cameraY", "value": y})
 
+def on_scroll(x, y, dx, dy):
+    if dy > 0:  # Scroll up
+        current_inventory_slot = (current_inventory_slot + 1) % 9  # Wrap around at 9 slots
+    elif dy < 0:  # Scroll down
+        current_inventory_slot = (current_inventory_slot - 1) % 9
+
 def save_actions(path):
     torch.save(actions, path)
 
@@ -180,7 +220,7 @@ def main():
     
     # Start user input tracking
     with keyboard.Listener(on_press=on_press, on_release=on_release) as k_listener, \
-         mouse.Listener(on_click=on_click, on_move=on_move) as m_listener:
+         mouse.Listener(on_click=on_click, on_move=on_move, on_scroll=on_scroll) as m_listener:
         k_listener.join()
         m_listener.join()
     

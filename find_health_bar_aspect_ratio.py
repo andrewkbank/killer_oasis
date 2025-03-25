@@ -16,6 +16,14 @@ output_folder = "./cropped_output"
 os.makedirs(output_folder, exist_ok=True)
 
 def count_hearts(img):
+    """
+    Counts the number of hearts in the healthbar of img
+    Conveniently detects the deathscreen since it contains no hearts
+    Known bugs:
+        - some slight x-shifts causes a full health bar to be 16 hp instead of 20 in some aspect ratios
+        - discoloring of the healthbar (ie: whither affect or poisoning) might be evaluated to 0 hp
+    None of those bugs should be too bad. They should results in false positives (instead of false negatives).
+    """
     width, height = img.size
     
     # Compute scale factor based on native UI resolution (480x270)
