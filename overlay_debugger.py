@@ -58,4 +58,5 @@ def overlay_video(video_path, action_path, output_path):
     print(f"Overlay video saved to {output_path}")
 
 # Example usage:
-overlay_video("./recording_data/Player729-f153ac423f61-20210806-224813.chunk_000.mp4", "./recording_data/Player729-f153ac423f61-20210806-224813.chunk_000.actions.pt", "overlay_output/replay_with_overlay.mp4")
+#overlay_video("./recording_data/Player729-f153ac423f61-20210806-224813.chunk_000.mp4", "./recording_data/Player729-f153ac423f61-20210806-224813.chunk_000.actions.pt", "overlay_output/replay_with_overlay.mp4")
+overlay_video("./recording_data/replay_20250326_003142.mp4", "./recording_data/actions_20250326_003142.pt", "overlay_output/replay_with_overlay_test.mp4")

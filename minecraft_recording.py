@@ -11,7 +11,7 @@ from pynput import keyboard, mouse
 from threading import Thread, Lock
 from collections import deque
 import datetime
-from PIL import ImageGrab
+from PIL import Image
 from find_health_bar_aspect_ratio import count_hearts
 
 # Constants
@@ -44,44 +44,48 @@ KEY_ACTION_MAP = {
     "r": "pickItem",
 }
 
-actions = []  # Stores user actions
 last_forward_press_time = 0  # Track time of last 'w' press
 double_tap_threshold = 0.3  # 300ms for sprint detection
 
 # Screen recording buffer
-FPS = 30
+FPS = 60
 BUFFER_SECONDS = 60
 FRAME_BUFFER = deque(maxlen=FPS * BUFFER_SECONDS)
+ACTION_BUFFER = deque(maxlen=FPS * BUFFER_SECONDS)  # Stores recent actions
 lock = Lock()
 recording = False
 
 damage_detected = False
 damage_timer = None
 timeout_seconds = 5
-
-sct = mss.mss()
-monitor = sct.monitors[1]
 current_inventory_slot = 1
-current_health = -1
+current_health = 0
 def player_taking_damage():
     # returns true if the player took damage
+    # also returns true if the player is dead (and wasn't dead the previous frame)
     # we calculate this by seeing whether the updated health is less than the previous health
     # there might be a more efficient way than taking another screenshot (we take 2 screenshots every frame), but idk and if it works it works
+    global current_health
+    sct = mss.mss()
+    monitor = sct.monitors[1]
     img = np.array(sct.grab(monitor))[:, :, :3]
+    img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+    img = Image.fromarray(img)
+    img.show() 
     updated_health = count_hearts(img)
-
+    # if updated_health>0: print(updated_health)
     took_damage =(updated_health<current_health)
+    dead = (updated_health==0 and current_health>0)
     current_health=updated_health
-    return took_damage
-
-def player_death():
-    # returns true if the player is dead
-    return (current_health==0)
+    return took_damage, dead
 
 def record_screen():
+    sct = mss.mss()
+    monitor = sct.monitors[1]
     while True:
         img = np.array(sct.grab(monitor))[:, :, :3]
-        img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+        img = cv2.resize(img, (640, 360))
+        #img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
         with lock:
             FRAME_BUFFER.append(img)
         time.sleep(1 / FPS)
@@ -90,15 +94,17 @@ def record_screen():
 def save_recording():
     with lock:
         frames = list(FRAME_BUFFER)
+        saved_actions = list(ACTION_BUFFER)
     
-    if not frames:
-        print("No frames to save.")
+    if not frames or not saved_actions:
+        print("No frames/actions to save.")
         return
     
     height, width, _ = frames[0].shape
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     output_file = f"replay_{timestamp}.mp4"
+    actions_file = f"actions_{timestamp}.pt"
     
     out = cv2.VideoWriter(output_file, fourcc, FPS, (width, height))
     
@@ -106,40 +112,40 @@ def save_recording():
         out.write(frame)
     out.release()
     print(f"Saved recording to {output_file}")
+    # Save Actions
+    torch.save(saved_actions, actions_file)
+    print(f"Saved actions to {actions_file}")
 
 
 def monitor_triggers():
     global damage_detected, damage_timer
     while True:
-        if player_death():
+        took_damage, dead = player_taking_damage()
+        if dead:
             print("Death detected! Saving recording...")
             save_recording()
             damage_detected = False
             damage_timer = None
-        elif player_taking_damage():
+        elif took_damage:
+            current_time = time.time()
             if not damage_detected:
                 print("Damage detected! Initializing recording buffer...")
                 damage_detected = True
-            
-            if damage_timer is not None:
-                damage_timer.cancel()
-            
-            damage_timer = Thread(target=delayed_save)
-            damage_timer.start()
+                damage_end_time = current_time + timeout_seconds
+            else:
+                # Extend the timeout instead of resetting everything
+                damage_end_time = current_time + timeout_seconds
+        # Check if enough time has passed since last damage to stop recording
+        if damage_detected and damage_end_time and time.time() > damage_end_time:
+            print("Saving damage-triggered recording...")
+            save_recording()
+            damage_detected = False
+            damage_end_time = None
         time.sleep(0.1)  # Check every 100ms
-
-
-def delayed_save():
-    global damage_detected, damage_timer
-    time.sleep(timeout_seconds)
-    print("Saving damage-triggered recording...")
-    save_recording()
-    damage_detected = False
-    damage_timer = None
-
 
 def on_press(key):
     global last_forward_press_time
+    global current_inventory_slot
     try:
         action = None
         if hasattr(key, 'char') and key.char:
@@ -148,13 +154,13 @@ def on_press(key):
             action = KEY_ACTION_MAP.get(key.name)
         
         if action:
-            actions.append({"time": time.time(), "action": action, "value": 1})
+            ACTION_BUFFER.append({"time": time.time(), "action": action, "value": 1})
             
             # Detect sprint (double-tap 'w')
             if action == "forward":
                 current_time = time.time()
                 if current_time - last_forward_press_time < double_tap_threshold:
-                    actions.append({"time": current_time, "action": "sprint", "value": 1})
+                    ACTION_BUFFER.append({"time": current_time, "action": "sprint", "value": 1})
                 last_forward_press_time = current_time
             elif action == "hotbar.1":
                 current_inventory_slot=1
@@ -186,30 +192,29 @@ def on_release(key):
         action = KEY_ACTION_MAP.get(key.name)
     
     if action:
-        actions.append({"time": time.time(), "action": action, "value": 0})
+        ACTION_BUFFER.append({"time": time.time(), "action": action, "value": 0})
 
 
 def on_click(x, y, button, pressed):
     action = "attack" if button == mouse.Button.left else "use"
-    actions.append({"time": time.time(), "action": action, "value": int(pressed)})
+    ACTION_BUFFER.append({"time": time.time(), "action": action, "value": int(pressed)})
 
 def on_move(x, y):
-    actions.append({"time": time.time(), "action": "cameraX", "value": x})
-    actions.append({"time": time.time(), "action": "cameraY", "value": y})
+    ACTION_BUFFER.append({"time": time.time(), "action": "cameraX", "value": x})
+    ACTION_BUFFER.append({"time": time.time(), "action": "cameraY", "value": y})
 
 def on_scroll(x, y, dx, dy):
+    global current_inventory_slot
     if dy > 0:  # Scroll up
         current_inventory_slot = (current_inventory_slot + 1) % 9  # Wrap around at 9 slots
     elif dy < 0:  # Scroll down
         current_inventory_slot = (current_inventory_slot - 1) % 9
-
-def save_actions(path):
-    torch.save(actions, path)
+    ACTION_BUFFER.append({"time": time.time(), "action": "hotbar."+current_inventory_slot,"value":1})
 
 
 def main():
     output_actions = "user.actions.pt"
-    
+    print("running")
     # Start screen recording buffer
     screen_thread = Thread(target=record_screen, daemon=True)
     screen_thread.start()
@@ -223,8 +228,6 @@ def main():
          mouse.Listener(on_click=on_click, on_move=on_move, on_scroll=on_scroll) as m_listener:
         k_listener.join()
         m_listener.join()
-    
-    save_actions(output_actions)
     print("Action logging completed.")
     
 

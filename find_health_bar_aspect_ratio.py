@@ -2,14 +2,6 @@ import tkinter as tk
 import os
 from PIL import Image
 
-# Get screen resolution
-root = tk.Tk()
-width = root.winfo_screenwidth()
-height = root.winfo_screenheight()
-root.destroy()
-
-print(f"Screen resolution: {width}x{height}")
-
 # Paths
 input_folder = "./screenshots"
 output_folder = "./cropped_output"
@@ -59,6 +51,7 @@ def count_hearts(img):
     return heart_count
 
 # Process all images
+"""
 for filename in os.listdir(input_folder):
     if filename.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
         input_path = os.path.join(input_folder, filename)
@@ -67,4 +60,5 @@ for filename in os.listdir(input_folder):
         heart_count = count_hearts(img)
         print(f"Detected {heart_count} half-hearts in {input_path}")
 
-print("Health bar extraction and analysis complete.")
+print("Health bar extraction and analysis complete.")"
+"""
