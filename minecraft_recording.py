@@ -49,7 +49,7 @@ last_forward_press_time = 0  # Track time of last 'w' press
 double_tap_threshold = 0.3  # 300ms for sprint detection
 
 # Screen recording buffer
-FPS = 60
+FPS = 20
 BUFFER_SECONDS = 60
 FRAME_BUFFER = deque(maxlen=FPS * BUFFER_SECONDS)
 ACTIONS_IN_A_SINGLE_FRAME = {}
@@ -94,24 +94,27 @@ def compile_single_frame_actions():
             last_frame["camera"] = np.array([ACTIONS_IN_A_SINGLE_FRAME["cameraX"], ACTIONS_IN_A_SINGLE_FRAME["cameraY"]])
         else:
             last_frame[action]=ACTIONS_IN_A_SINGLE_FRAME[action]
-            #if ACTIONS_IN_A_SINGLE_FRAME[action]>0:
-            #    print(action)
-            #    print(last_frame)
     ACTIONS_IN_A_SINGLE_FRAME = {}
     return copy.deepcopy(last_frame)
 
 def record_screen():
     sct = mss.mss()
     monitor = sct.monitors[1]
+    last_time = time.time()  # Track time manually
     while True:
-        img = np.array(sct.grab(monitor))[:, :, :3]
-        img = cv2.resize(img, (640, 360))
-        #img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-        action_in_a_single_frame = compile_single_frame_actions()
-        with lock:
-            FRAME_BUFFER.append(img)
-            ACTION_BUFFER.append(action_in_a_single_frame)
-        time.sleep(1 / FPS)
+        current_time = time.time()
+        elapsed_time = current_time - last_time
+
+        if elapsed_time >= 1 / (2*FPS):  # Only capture if enough time has passed
+            last_time = current_time  # Update last captured frame time
+
+            img = np.array(sct.grab(monitor))[:, :, :3]
+            img = cv2.resize(img, (640, 360))
+
+            action_in_a_single_frame = compile_single_frame_actions()
+            with lock:
+                FRAME_BUFFER.append(img)
+                ACTION_BUFFER.append(action_in_a_single_frame)
 
 
 def save_recording():
@@ -130,6 +133,7 @@ def save_recording():
     actions_file = f"actions_{timestamp}.pt"
     
     out = cv2.VideoWriter(output_file, fourcc, FPS, (width, height))
+    #out = cv2.VideoWriter(output_file, fourcc, 10, (width, height))
     
     for frame in frames:
         out.write(frame)
@@ -164,7 +168,7 @@ def monitor_triggers():
             save_recording()
             damage_detected = False
             damage_end_time = None
-        time.sleep(0.1)  # Check every 100ms
+        time.sleep(1/FPS)  # Check every 100ms
 
 def on_press(key):
     global last_forward_press_time
