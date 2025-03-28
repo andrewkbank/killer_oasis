@@ -6,10 +6,19 @@ This file should mostly be used for debugging
 import cv2
 import torch
 import numpy as np
+# {'ESC': 0, 'back': 0, 'drop': 0, 'forward': 0, 'hotbar.1': 0, 'hotbar.2': 0, 'hotbar.3': 0, 'hotbar.4': 0, 'hotbar.5': 0, 'hotbar.6': 0, 'hotbar.7': 0, 'hotbar.8': 0, 'hotbar.9': 0, 
+# 'inventory': 0, 'jump': 0, 'left': 0, 'right': 0, 'sneak': 0, 'sprint': 0, 'swapHands': 0, 'camera': array([40, 40]), 'attack': 0, 'use': 0, 'pickItem': 0}
 
+# {'ESC': 0, 'back': 0, 'drop': 0, 'forward': 0, 'hotbar.1': 0, 'hotbar.2': 0, 'hotbar.3': 0, 'hotbar.4': 0, 'hotbar.5': 0, 'hotbar.6': 0, 'hotbar.7': 0, 'hotbar.8': 0, 'hotbar.9': 0, 
+# 'inventory': 0, 'jump': 0, 'left': 0, 'right': 0, 'sneak': 0, 'sprint': 0, 'swapHands': 0, 'camera': array([0, 0]), 'attack': 0, 'use': 0, 'pickItem': 0}
+
+#ACTION_KEYS = [
+#    "inventory", "ESC", "hotbar.1", "hotbar.2", "hotbar.3", "hotbar.4", "hotbar.5", "hotbar.6", "hotbar.7", "hotbar.8", "hotbar.9", 
+#    "forward", "back", "left", "right", "jump", "sneak", "sprint", "swapHands", "attack", "use", "pickItem", "drop", "cameraX", "cameraY"
+#]
 ACTION_KEYS = [
-    "inventory", "ESC", "hotbar.1", "hotbar.2", "hotbar.3", "hotbar.4", "hotbar.5", "hotbar.6", "hotbar.7", "hotbar.8", "hotbar.9", 
-    "forward", "back", "left", "right", "jump", "sneak", "sprint", "swapHands", "attack", "use", "pickItem", "drop", "cameraX", "cameraY"
+    'ESC', 'back', 'drop', 'forward', 'hotbar.1', 'hotbar.2', 'hotbar.3', 'hotbar.4', 'hotbar.5', 'hotbar.6', 'hotbar.7', 'hotbar.8', 'hotbar.9', 
+    'inventory', 'jump', 'left', 'right', 'sneak', 'sprint', 'swapHands', 'camera', 'attack', 'use', 'pickItem'
 ]
 
 def load_actions(action_path):
@@ -17,14 +26,16 @@ def load_actions(action_path):
 
 def draw_overlay(frame, actions, frame_idx, width, height):
     overlay = frame.copy()
-    
+    #print(actions)
     for i, key in enumerate(ACTION_KEYS):
-        if key in ["cameraX", "cameraY"]:
+        if key=='camera':
             continue  # Camera movement will be visualized differently
         
         value = actions[frame_idx].get(key, 0)
+        #if(value>0):
+        #    print(actions[frame_idx])
         color = (0, 255, 0) if value else (255, 0, 0)
-        cv2.putText(overlay, f"{key}: {value}", (10, 30 + i * 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+        cv2.putText(overlay, f"{key}: {value}", (10, 30 + i * 10), cv2.FONT_HERSHEY_SIMPLEX, 0.25, color, 1)
     
     return overlay
 
@@ -59,4 +70,5 @@ def overlay_video(video_path, action_path, output_path):
 
 # Example usage:
 #overlay_video("./recording_data/Player729-f153ac423f61-20210806-224813.chunk_000.mp4", "./recording_data/Player729-f153ac423f61-20210806-224813.chunk_000.actions.pt", "overlay_output/replay_with_overlay.mp4")
-overlay_video("./recording_data/replay_20250326_003142.mp4", "./recording_data/actions_20250326_003142.pt", "overlay_output/replay_with_overlay_test.mp4")
+overlay_video("./recording_data/replay_20250327_221827.mp4", "./recording_data/actions_20250327_221827.pt", "overlay_output/replay_with_overlay_test.mp4")
+

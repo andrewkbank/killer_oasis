@@ -13,11 +13,12 @@ from collections import deque
 import datetime
 from PIL import Image
 from find_health_bar_aspect_ratio import count_hearts
+import copy
 
 # Constants
 ACTION_KEYS = [
-    "inventory", "ESC", "hotbar.1", "hotbar.2", "hotbar.3", "hotbar.4", "hotbar.5", "hotbar.6", "hotbar.7", "hotbar.8", "hotbar.9", 
-    "forward", "back", "left", "right", "cameraX", "cameraY", "jump", "sneak", "sprint", "swapHands", "attack", "use", "pickItem", "drop"
+    "ESC", "back", "drop", "forward", "hotbar.1", "hotbar.2", "hotbar.3", "hotbar.4", "hotbar.5", "hotbar.6", "hotbar.7", "hotbar.8", "hotbar.9", 
+    "inventory", "jump", "left", "right", "sneak", "sprint", "swapHands", "camera", "attack", "use", "pickItem"
 ]
 
 KEY_ACTION_MAP = {
@@ -51,6 +52,8 @@ double_tap_threshold = 0.3  # 300ms for sprint detection
 FPS = 60
 BUFFER_SECONDS = 60
 FRAME_BUFFER = deque(maxlen=FPS * BUFFER_SECONDS)
+ACTIONS_IN_A_SINGLE_FRAME = {}
+last_frame = None
 ACTION_BUFFER = deque(maxlen=FPS * BUFFER_SECONDS)  # Stores recent actions
 lock = Lock()
 recording = False
@@ -79,6 +82,24 @@ def player_taking_damage():
     current_health=updated_health
     return took_damage, dead
 
+def compile_single_frame_actions():
+    global ACTIONS_IN_A_SINGLE_FRAME
+    global last_frame
+    if not last_frame:
+        last_frame = {"ESC":0, "back":0, "drop":0, "forward":0, "hotbar.1":0, "hotbar.2":0, "hotbar.3":0, "hotbar.4":0, "hotbar.5":0, "hotbar.6":0, "hotbar.7":0, "hotbar.8":0, "hotbar.9":0, 
+                        "inventory":0, "jump":0, "left":0, "right":0, "sneak":0, "sprint":0, "swapHands":0, "camera":np.array([0,0]), "attack":0, "use":0, "pickItem":0 }
+    for action in ACTION_KEYS:
+        if action not in ACTIONS_IN_A_SINGLE_FRAME: continue
+        if action == "camera":
+            last_frame["camera"] = np.array([ACTIONS_IN_A_SINGLE_FRAME["cameraX"], ACTIONS_IN_A_SINGLE_FRAME["cameraY"]])
+        else:
+            last_frame[action]=ACTIONS_IN_A_SINGLE_FRAME[action]
+            #if ACTIONS_IN_A_SINGLE_FRAME[action]>0:
+            #    print(action)
+            #    print(last_frame)
+    ACTIONS_IN_A_SINGLE_FRAME = {}
+    return copy.deepcopy(last_frame)
+
 def record_screen():
     sct = mss.mss()
     monitor = sct.monitors[1]
@@ -86,8 +107,10 @@ def record_screen():
         img = np.array(sct.grab(monitor))[:, :, :3]
         img = cv2.resize(img, (640, 360))
         #img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+        action_in_a_single_frame = compile_single_frame_actions()
         with lock:
             FRAME_BUFFER.append(img)
+            ACTION_BUFFER.append(action_in_a_single_frame)
         time.sleep(1 / FPS)
 
 
@@ -154,13 +177,15 @@ def on_press(key):
             action = KEY_ACTION_MAP.get(key.name)
         
         if action:
-            ACTION_BUFFER.append({"time": time.time(), "action": action, "value": 1})
+            #ACTION_BUFFER.append({action: 1})
+            ACTIONS_IN_A_SINGLE_FRAME[action] = 1
             
             # Detect sprint (double-tap 'w')
             if action == "forward":
                 current_time = time.time()
                 if current_time - last_forward_press_time < double_tap_threshold:
-                    ACTION_BUFFER.append({"time": current_time, "action": "sprint", "value": 1})
+                    #ACTION_BUFFER.append({"sprint": 1})
+                    ACTIONS_IN_A_SINGLE_FRAME["sprint"] = 1
                 last_forward_press_time = current_time
             elif action == "hotbar.1":
                 current_inventory_slot=1
@@ -192,16 +217,23 @@ def on_release(key):
         action = KEY_ACTION_MAP.get(key.name)
     
     if action:
-        ACTION_BUFFER.append({"time": time.time(), "action": action, "value": 0})
+        #ACTION_BUFFER.append({action: 0})
+        ACTIONS_IN_A_SINGLE_FRAME[action] = 0
+        if action == "forward":
+            ACTIONS_IN_A_SINGLE_FRAME["sprint"] = 0
 
 
 def on_click(x, y, button, pressed):
     action = "attack" if button == mouse.Button.left else "use"
-    ACTION_BUFFER.append({"time": time.time(), "action": action, "value": int(pressed)})
+    #ACTION_BUFFER.append({action: int(pressed)})
+    ACTIONS_IN_A_SINGLE_FRAME[action] = int(pressed)
 
 def on_move(x, y):
-    ACTION_BUFFER.append({"time": time.time(), "action": "cameraX", "value": x})
-    ACTION_BUFFER.append({"time": time.time(), "action": "cameraY", "value": y})
+    #ACTION_BUFFER.append({"cameraX": x})
+    #ACTION_BUFFER.append({"cameraY": y})
+    ACTIONS_IN_A_SINGLE_FRAME["cameraX"] = x
+    ACTIONS_IN_A_SINGLE_FRAME["cameraY"] = y
+    
 
 def on_scroll(x, y, dx, dy):
     global current_inventory_slot
@@ -209,7 +241,11 @@ def on_scroll(x, y, dx, dy):
         current_inventory_slot = (current_inventory_slot + 1) % 9  # Wrap around at 9 slots
     elif dy < 0:  # Scroll down
         current_inventory_slot = (current_inventory_slot - 1) % 9
-    ACTION_BUFFER.append({"time": time.time(), "action": "hotbar."+current_inventory_slot,"value":1})
+    #ACTION_BUFFER.append({"hotbar."+(current_inventory_slot+1):1})
+    ACTIONS_IN_A_SINGLE_FRAME["hotbar."+str(current_inventory_slot+1)] = 1
+    for i in range(8):
+        if i==current_inventory_slot: continue
+        ACTIONS_IN_A_SINGLE_FRAME["hotbar."+str(i+1)] = 0
 
 
 def main():
