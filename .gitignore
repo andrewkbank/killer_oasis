@@ -1,0 +1,7 @@
+build/minecraft_recording/Analysis-00.toc
+build/minecraft_recording/base_library.zip
+build/minecraft_recording/EXE-00.toc
+build/minecraft_recording/localpycs/pyimod01_archive.pyc
+/build
+/dist
+*.spec
