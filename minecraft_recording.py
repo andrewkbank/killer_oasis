@@ -75,7 +75,6 @@ def player_taking_damage():
     img = np.array(sct.grab(monitor))[:, :, :3]
     img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
     img = Image.fromarray(img)
-    img.show() 
     updated_health = count_hearts(img)
     took_damage =(updated_health<current_health)
     dead = (updated_health==0 and current_health>0)
