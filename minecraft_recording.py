@@ -1,19 +1,19 @@
 """
 This is the file that runs during gameplay to record the screen, the keyboard, and the mouse
 """
-
 import cv2
 import numpy as np
 import torch
 import time
 import mss
 from pynput import keyboard, mouse
-from threading import Thread, Lock
+from threading import Thread, Lock, Event
 from collections import deque
 import datetime
 from PIL import Image
 from find_health_bar_aspect_ratio import count_hearts
 import copy
+from pathlib import Path
 
 # Constants
 ACTION_KEYS = [
@@ -56,7 +56,8 @@ ACTIONS_IN_A_SINGLE_FRAME = {}
 last_frame = None
 ACTION_BUFFER = deque(maxlen=FPS * BUFFER_SECONDS)  # Stores recent actions
 lock = Lock()
-recording = False
+
+stop_event = Event()  # Global active signal
 
 damage_detected = False
 damage_timer = None
@@ -76,7 +77,6 @@ def player_taking_damage():
     img = Image.fromarray(img)
     img.show() 
     updated_health = count_hearts(img)
-    # if updated_health>0: print(updated_health)
     took_damage =(updated_health<current_health)
     dead = (updated_health==0 and current_health>0)
     current_health=updated_health
@@ -101,7 +101,7 @@ def record_screen():
     sct = mss.mss()
     monitor = sct.monitors[1]
     last_time = time.time()  # Track time manually
-    while True:
+    while not stop_event.is_set():
         current_time = time.time()
         elapsed_time = current_time - last_time
 
@@ -125,28 +125,33 @@ def save_recording():
     if not frames or not saved_actions:
         print("No frames/actions to save.")
         return
-    
+
+    # Get the path to the Downloads folder and create the target directory
+    downloads_path = Path.home() / "Downloads"
+    save_dir = downloads_path / "minecraft_recording_data"
+    save_dir.mkdir(parents=True, exist_ok=True)  # Create folder if it doesn't exist
+
     height, width, _ = frames[0].shape
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = f"replay_{timestamp}.mp4"
-    actions_file = f"actions_{timestamp}.pt"
-    
-    out = cv2.VideoWriter(output_file, fourcc, FPS, (width, height))
-    #out = cv2.VideoWriter(output_file, fourcc, 10, (width, height))
-    
+    output_file = save_dir / f"replay_{timestamp}.mp4"
+    actions_file = save_dir / f"actions_{timestamp}.pt"
+
+    # Save video
+    out = cv2.VideoWriter(str(output_file), fourcc, FPS, (width, height))
     for frame in frames:
         out.write(frame)
     out.release()
     print(f"Saved recording to {output_file}")
-    # Save Actions
-    torch.save(saved_actions, actions_file)
+
+    # Save actions
+    torch.save(saved_actions, str(actions_file))
     print(f"Saved actions to {actions_file}")
 
 
 def monitor_triggers():
     global damage_detected, damage_timer
-    while True:
+    while not stop_event.is_set():
         took_damage, dead = player_taking_damage()
         if dead:
             print("Death detected! Saving recording...")
@@ -173,7 +178,20 @@ def monitor_triggers():
 def on_press(key):
     global last_forward_press_time
     global current_inventory_slot
+    global screen_thread
+    global trigger_thread
+    global k_listener
+    global m_listener
     try:
+        if key.char == 'l':
+            #key to stop the program
+            stop_event.set()
+            print("Stopping recording")
+            screen_thread.join()
+            trigger_thread.join()
+            k_listener.stop()
+            m_listener.stop()
+            print("All threads stopped.")
         action = None
         if hasattr(key, 'char') and key.char:
             action = KEY_ACTION_MAP.get(key.char.lower())
@@ -186,11 +204,9 @@ def on_press(key):
             
             # Detect sprint (double-tap 'w')
             if action == "forward":
-                current_time = time.time()
-                if current_time - last_forward_press_time < double_tap_threshold:
+                if last_frame["sprint"]==1 or time.time() - last_forward_press_time < double_tap_threshold:
                     #ACTION_BUFFER.append({"sprint": 1})
                     ACTIONS_IN_A_SINGLE_FRAME["sprint"] = 1
-                last_forward_press_time = current_time
             elif action == "hotbar.1":
                 current_inventory_slot=1
             elif action == "hotbar.2":
@@ -214,6 +230,7 @@ def on_press(key):
 
 
 def on_release(key):
+    global last_forward_press_time
     action = None
     if hasattr(key, 'char') and key.char:
         action = KEY_ACTION_MAP.get(key.char.lower())
@@ -225,6 +242,7 @@ def on_release(key):
         ACTIONS_IN_A_SINGLE_FRAME[action] = 0
         if action == "forward":
             ACTIONS_IN_A_SINGLE_FRAME["sprint"] = 0
+            last_forward_press_time = time.time()
 
 
 def on_click(x, y, button, pressed):
@@ -233,8 +251,6 @@ def on_click(x, y, button, pressed):
     ACTIONS_IN_A_SINGLE_FRAME[action] = int(pressed)
 
 def on_move(x, y):
-    #ACTION_BUFFER.append({"cameraX": x})
-    #ACTION_BUFFER.append({"cameraY": y})
     ACTIONS_IN_A_SINGLE_FRAME["cameraX"] = x
     ACTIONS_IN_A_SINGLE_FRAME["cameraY"] = y
     
@@ -242,18 +258,20 @@ def on_move(x, y):
 def on_scroll(x, y, dx, dy):
     global current_inventory_slot
     if dy > 0:  # Scroll up
-        current_inventory_slot = (current_inventory_slot + 1) % 9  # Wrap around at 9 slots
+        current_inventory_slot = (current_inventory_slot - 1) % 9  # Wrap around at 9 slots
     elif dy < 0:  # Scroll down
-        current_inventory_slot = (current_inventory_slot - 1) % 9
-    #ACTION_BUFFER.append({"hotbar."+(current_inventory_slot+1):1})
+        current_inventory_slot = (current_inventory_slot + 1) % 9
     ACTIONS_IN_A_SINGLE_FRAME["hotbar."+str(current_inventory_slot+1)] = 1
-    for i in range(8):
+    for i in range(9):
         if i==current_inventory_slot: continue
         ACTIONS_IN_A_SINGLE_FRAME["hotbar."+str(i+1)] = 0
 
 
 def main():
-    output_actions = "user.actions.pt"
+    global screen_thread
+    global trigger_thread
+    global k_listener
+    global m_listener
     print("running")
     # Start screen recording buffer
     screen_thread = Thread(target=record_screen, daemon=True)
@@ -268,7 +286,6 @@ def main():
          mouse.Listener(on_click=on_click, on_move=on_move, on_scroll=on_scroll) as m_listener:
         k_listener.join()
         m_listener.join()
-    print("Action logging completed.")
     
 
 if __name__ == "__main__":
