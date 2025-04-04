@@ -29,6 +29,12 @@ def draw_overlay(frame, actions, frame_idx, width, height):
     #print(actions)
     for i, key in enumerate(ACTION_KEYS):
         if key=='camera':
+            #print(actions[frame_idx])
+            value = actions[frame_idx].get(key, 0)
+            #print(value)
+            color = (0, 255, 0)
+            cv2.putText(overlay, f"x: {value[1]}", (60, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.25, color, 1)
+            cv2.putText(overlay, f"y: {value[0]}", (60, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.25, color, 1)
             continue  # Camera movement will be visualized differently
         
         value = actions[frame_idx].get(key, 0)
@@ -46,6 +52,13 @@ def overlay_video(video_path, action_path, output_path):
     if not cap.isOpened():
         print("Error opening video file.")
         return
+    # Get frame width and height
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    
+    print(f"Frame width: {width}")
+    print(f"Frame height: {height}")
+
     actual_fps = cap.get(cv2.CAP_PROP_FPS)  # Get the actual FPS of the input video
     print("actual_fps:",actual_fps)
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
@@ -71,7 +84,12 @@ def overlay_video(video_path, action_path, output_path):
 
 # Example usage:
 #overlay_video("./recording_data/Player729-f153ac423f61-20210806-224813.chunk_000.mp4", "./recording_data/Player729-f153ac423f61-20210806-224813.chunk_000.actions.pt", "overlay_output/replay_with_overlay.mp4")
-#overlay_video("./recording_data/replay_20250328_143935.mp4", "./recording_data/actions_20250328_143935.pt", "overlay_output/replay_with_overlay_test.mp4")
-overlay_video("./recording_data/replay_20250329_205453.mp4", "./recording_data/actions_20250329_205453.pt", "overlay_output/replay_with_overlay_test.mp4")
-
-
+#overlay_video("./recording_data/replay_20250329_205453.mp4", "./recording_data/actions_20250329_205453.pt", "overlay_output/replay_with_overlay_test.mp4")
+#overlay_video("./recording_data/replay_20250329_235208.mp4", "./recording_data/actions_20250329_235208.pt", "overlay_output/replay_with_overlay_test.mp4")
+#overlay_video("./recording_data/replay_20250404_103217.mp4", "./recording_data/actions_20250404_103217.pt", "overlay_output/replay_with_overlay_test.mp4")
+#overlay_video("./recording_data/replay_20250404_105028.mp4", "./recording_data/actions_20250404_105028.pt", "overlay_output/replay_with_overlay_test.mp4")
+#overlay_video("./recording_data/replay_20250404_105615.mp4", "./recording_data/actions_20250404_105615.pt", "overlay_output/replay_with_overlay_test.mp4")
+#overlay_video("./recording_data/replay_20250404_110259.mp4", "./recording_data/actions_20250404_110259.pt", "overlay_output/replay_with_overlay_test.mp4")
+#overlay_video("./recording_data/replay_20250404_110540.mp4", "./recording_data/actions_20250404_110540.pt", "overlay_output/replay_with_overlay_test.mp4")
+#overlay_video("./recording_data/replay_20250404_111456.mp4", "./recording_data/actions_20250404_111456.pt", "overlay_output/replay_with_overlay_test.mp4")
+overlay_video("./recording_data/replay_20250404_111747.mp4", "./recording_data/actions_20250404_111747.pt", "overlay_output/replay_with_overlay_test.mp4")

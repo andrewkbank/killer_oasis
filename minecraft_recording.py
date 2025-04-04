@@ -86,30 +86,41 @@ def compile_single_frame_actions():
     global last_frame
     if not last_frame:
         last_frame = {"ESC":0, "back":0, "drop":0, "forward":0, "hotbar.1":0, "hotbar.2":0, "hotbar.3":0, "hotbar.4":0, "hotbar.5":0, "hotbar.6":0, "hotbar.7":0, "hotbar.8":0, "hotbar.9":0, 
-                        "inventory":0, "jump":0, "left":0, "right":0, "sneak":0, "sprint":0, "swapHands":0, "camera":np.array([0,0]), "attack":0, "use":0, "pickItem":0 }
-    for action in ACTION_KEYS:
-        if action not in ACTIONS_IN_A_SINGLE_FRAME: continue
-        if action == "camera":
-            last_frame["camera"] = np.array([ACTIONS_IN_A_SINGLE_FRAME["cameraX"], ACTIONS_IN_A_SINGLE_FRAME["cameraY"]])
-        else:
-            last_frame[action]=ACTIONS_IN_A_SINGLE_FRAME[action]
+                        "inventory":0, "jump":0, "left":0, "right":0, "sneak":0, "sprint":0, "swapHands":0, "camera":np.array([40,40]), "attack":0, "use":0, "pickItem":0 }
+    
+    for action in ACTIONS_IN_A_SINGLE_FRAME:
+        last_frame[action]=ACTIONS_IN_A_SINGLE_FRAME[action]
+    #if 'camera' not in ACTIONS_IN_A_SINGLE_FRAME:
+    #    last_frame["camera"]=np.array([40,40])
     ACTIONS_IN_A_SINGLE_FRAME = {}
     return copy.deepcopy(last_frame)
 
 def record_screen():
+    global ACTIONS_IN_A_SINGLE_FRAME
     sct = mss.mss()
     monitor = sct.monitors[1]
+    prev_x, prev_y, current_x, current_y = 0, 0, 0, 0
     last_time = time.time()  # Track time manually
     while not stop_event.is_set():
         current_time = time.time()
         elapsed_time = current_time - last_time
 
-        if elapsed_time >= 1 / (2*FPS):  # Only capture if enough time has passed
+        if elapsed_time >= 1 / (FPS):  # Only capture if enough time has passed
             last_time = current_time  # Update last captured frame time
-
-            img = np.array(sct.grab(monitor))[:, :, :3]
-            img = cv2.resize(img, (640, 360))
-
+            print("start",last_time)
+            img = np.array(sct.grab(monitor)) #This line of code takes longer than 1/20th of a second :()
+            img = img[:, :, :3]
+            img = cv2.resize(img, (640, 360)) #This line of code also takes a while
+            #dx = current_x - prev_x
+            #dy = current_y - prev_y
+            # Clamp to max allowed delta (to reduce impact of outliers)
+            #dx = max(-40, min(current_x - prev_x, 40))
+            #dy = max(-40, min(current_y - prev_y, 40))
+            
+            # Up results in small-y
+            # Left results in small-x
+            ACTIONS_IN_A_SINGLE_FRAME["camera"] = np.array([40-max(-40, min(current_x - prev_x, 40)),40-max(-40, min(current_y - prev_y, 40))])
+            prev_x, prev_y = current_x, current_y
             action_in_a_single_frame = compile_single_frame_actions()
             with lock:
                 FRAME_BUFFER.append(img)
@@ -139,6 +150,7 @@ def save_recording():
     # Save video
     out = cv2.VideoWriter(str(output_file), fourcc, FPS, (width, height))
     for frame in frames:
+        frame = frame[:, :, :3]
         out.write(frame)
     out.release()
     print(f"Saved recording to {output_file}")
@@ -249,9 +261,12 @@ def on_click(x, y, button, pressed):
     #ACTION_BUFFER.append({action: int(pressed)})
     ACTIONS_IN_A_SINGLE_FRAME[action] = int(pressed)
 
+current_x, current_y = None, None
 def on_move(x, y):
-    ACTIONS_IN_A_SINGLE_FRAME["cameraX"] = x
-    ACTIONS_IN_A_SINGLE_FRAME["cameraY"] = y
+    global current_x, current_y
+    current_x = x
+    current_y = y
+    #ACTIONS_IN_A_SINGLE_FRAME["camera"] = np.array([40-dx, 40-dy])
     
 
 def on_scroll(x, y, dx, dy):
