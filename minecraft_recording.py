@@ -45,12 +45,21 @@ KEY_ACTION_MAP = {
     "r": "pickItem",
 }
 
+SPECIAL_KEY_ACTION_MAP = {
+    keyboard.Key.space: "jump",
+    keyboard.Key.shift: "sneak",
+    #keyboard.Key.shift_r: "Right Shift",
+    keyboard.Key.ctrl: "sprint",
+    #keyboard.Key.ctrl_r: "Right Ctrl",
+    keyboard.Key.esc: "ESC"
+}
+
 last_forward_press_time = 0  # Track time of last 'w' press
 double_tap_threshold = 0.3  # 300ms for sprint detection
 
 # Screen recording buffer
 FPS = 20
-BUFFER_SECONDS = 60
+BUFFER_SECONDS = 15
 FRAME_BUFFER = deque(maxlen=FPS * BUFFER_SECONDS)
 ACTIONS_IN_A_SINGLE_FRAME = {}
 last_frame = None
@@ -89,17 +98,39 @@ def compile_single_frame_actions():
                         "inventory":0, "jump":0, "left":0, "right":0, "sneak":0, "sprint":0, "swapHands":0, "camera":np.array([40,40]), "attack":0, "use":0, "pickItem":0 }
     
     for action in ACTIONS_IN_A_SINGLE_FRAME:
+        if "hotbar" in action: continue
         last_frame[action]=ACTIONS_IN_A_SINGLE_FRAME[action]
-    #if 'camera' not in ACTIONS_IN_A_SINGLE_FRAME:
-    #    last_frame["camera"]=np.array([40,40])
     ACTIONS_IN_A_SINGLE_FRAME = {}
     return copy.deepcopy(last_frame)
 
+def compress_mouse(dx):
+    """
+    Stolen from https://github.com/etched-ai/open-oasis/issues/9
+    Results in camera coordinates centered on [40,40]
+    Note that Oasis's dataset clearly contains camera values such as 39 and 41, which means dx must contain sub-pixel quantities (between 0 and 0.25)
+    We'll just assume sub-pixel quantities of 0.25 for now
+    """
+    #Convert dx to sub-pixel quantity of 0.25
+    dx/=4.0
+
+    max_val = 20
+    bin_size = 0.5
+    mu = 2.7
+
+    dx = np.clip(dx, -max_val, max_val)
+    dx /= max_val
+    v_encode = np.sign(dx) * (np.log(1.0 + mu * np.abs(dx)) / np.log(1.0 + mu))
+    v_encode *= max_val
+    dx = v_encode
+
+    return np.round((dx + max_val) / bin_size).astype(np.int64)
+
 def record_screen():
     global ACTIONS_IN_A_SINGLE_FRAME
+    global current_x, current_y, dx, dy
     sct = mss.mss()
     monitor = sct.monitors[1]
-    prev_x, prev_y, current_x, current_y = 0, 0, 0, 0
+    dx, dy, current_x, current_y = 0, 0, 0, 0
     last_time = time.time()  # Track time manually
     while not stop_event.is_set():
         current_time = time.time()
@@ -107,20 +138,16 @@ def record_screen():
 
         if elapsed_time >= 1 / (FPS):  # Only capture if enough time has passed
             last_time = current_time  # Update last captured frame time
-            print("start",last_time)
-            img = np.array(sct.grab(monitor)) #This line of code takes longer than 1/20th of a second :()
+            img = np.array(sct.grab(monitor)) #This line of code may take longer than 1/20th of a second :(
             img = img[:, :, :3]
             img = cv2.resize(img, (640, 360)) #This line of code also takes a while
-            #dx = current_x - prev_x
-            #dy = current_y - prev_y
-            # Clamp to max allowed delta (to reduce impact of outliers)
-            #dx = max(-40, min(current_x - prev_x, 40))
-            #dy = max(-40, min(current_y - prev_y, 40))
             
             # Up results in small-y
             # Left results in small-x
-            ACTIONS_IN_A_SINGLE_FRAME["camera"] = np.array([40-max(-40, min(current_x - prev_x, 40)),40-max(-40, min(current_y - prev_y, 40))])
-            prev_x, prev_y = current_x, current_y
+            # Note that due to a quirk in the VPT data, x and y are swapped so it looks like (y, x)
+            ACTIONS_IN_A_SINGLE_FRAME["camera"] = np.array([compress_mouse(dy), compress_mouse(dx)])
+            current_x, current_y = mouse.Controller().position
+            dx, dy = 0, 0
             action_in_a_single_frame = compile_single_frame_actions()
             with lock:
                 FRAME_BUFFER.append(img)
@@ -128,6 +155,8 @@ def record_screen():
 
 
 def save_recording():
+    global FRAME_BUFFER
+    global ACTION_BUFFER
     with lock:
         frames = list(FRAME_BUFFER)
         saved_actions = list(ACTION_BUFFER)
@@ -159,10 +188,18 @@ def save_recording():
     torch.save(saved_actions, str(actions_file))
     print(f"Saved actions to {actions_file}")
 
+    # Clear buffers
+    FRAME_BUFFER = deque(maxlen=FPS * BUFFER_SECONDS)
+    ACTION_BUFFER = deque(maxlen=FPS * BUFFER_SECONDS)
+
 
 def monitor_triggers():
     global damage_detected, damage_timer
     while not stop_event.is_set():
+        # Make sure the triggers don't occur if we don't have a full frame buffer
+        if len(FRAME_BUFFER)!=FRAME_BUFFER.maxlen: 
+            time.sleep(1/FPS)
+            continue
         took_damage, dead = player_taking_damage()
         if dead:
             print("Death detected! Saving recording...")
@@ -237,7 +274,10 @@ def on_press(key):
             elif action == "hotbar.9":
                 current_inventory_slot=9
     except AttributeError:
-        pass
+        action = SPECIAL_KEY_ACTION_MAP.get(key)
+        if action:
+            #ACTION_BUFFER.append({action: 1})
+            ACTIONS_IN_A_SINGLE_FRAME[action] = 1
 
 
 def on_release(key):
@@ -261,15 +301,25 @@ def on_click(x, y, button, pressed):
     #ACTION_BUFFER.append({action: int(pressed)})
     ACTIONS_IN_A_SINGLE_FRAME[action] = int(pressed)
 
-current_x, current_y = None, None
 def on_move(x, y):
-    global current_x, current_y
-    current_x = x
-    current_y = y
-    #ACTIONS_IN_A_SINGLE_FRAME["camera"] = np.array([40-dx, 40-dy])
+    """
+    Note that when not in a menu (such as your inventory or the pause menu), 
+    Minecraft will constantly reset your mouse location to the last location it was in before you started playing
+
+    As a result, we can't just find (dx, dy) over 20 fps by just taking the difference between 2 mouse locations (since Minecraft runs at faster than 20 fps)
+    We need to accumulate (dx, dy) over potentially multiple updates across 1 frame @ 20 fps
+    """
+    global current_x, current_y, dx, dy
+    dx += x-current_x
+    dy += y-current_y
     
 
 def on_scroll(x, y, dx, dy):
+    """
+    I currently don't have a good solution for initializing current_inventory_slot
+    It's possible to spawn in with the current inventory slot not being the first slot (ie: loading a save where you're current inventory slot was your 2nd slot)
+    It's encouraged that when your inputs are recording that you start by pressing a key 1-9 to 'anchor' current_inventory slot before scrolling
+    """
     global current_inventory_slot
     if dy > 0:  # Scroll up
         current_inventory_slot = (current_inventory_slot - 1) % 9  # Wrap around at 9 slots

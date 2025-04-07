@@ -1,11 +1,11 @@
-import tkinter as tk
-import os
-from PIL import Image
+#import tkinter as tk
+#import os
+#from PIL import Image
 
 # Paths
-input_folder = "./screenshots"
-output_folder = "./cropped_output"
-os.makedirs(output_folder, exist_ok=True)
+#input_folder = "./screenshots"
+#output_folder = "./cropped_output"
+#os.makedirs(output_folder, exist_ok=True)
 
 def count_hearts(img):
     """
