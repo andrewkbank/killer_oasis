@@ -84,10 +84,4 @@ def overlay_video(video_path, action_path, output_path):
 
 # Example usage:
 #overlay_video("./recording_data/Player729-f153ac423f61-20210806-224813.chunk_000.mp4", "./recording_data/Player729-f153ac423f61-20210806-224813.chunk_000.actions.pt", "overlay_output/replay_with_overlay.mp4")
-#overlay_video("./recording_data/replay_20250406_220923.mp4", "./recording_data/actions_20250406_220923.pt", "overlay_output/replay_with_overlay_test.mp4")
-#overlay_video("./recording_data/replay_20250406_212840.mp4", "./recording_data/actions_20250406_212840.pt", "overlay_output/replay_with_overlay_test.mp4")
-#overlay_video("./recording_data/replay_20250405_225643.mp4", "./recording_data/actions_20250405_225643.pt", "overlay_output/replay_with_overlay_test.mp4")
-#overlay_video("./recording_data/replay_20250407_180354.mp4", "./recording_data/actions_20250407_180354.pt", "overlay_output/replay_with_overlay_test.mp4")
-#overlay_video("./recording_data/replay_20250407_181728.mp4", "./recording_data/actions_20250407_181728.pt", "overlay_output/replay_with_overlay_test.mp4")
-#overlay_video("./recording_data/replay_20250407_182239.mp4", "./recording_data/actions_20250407_182239.pt", "overlay_output/replay_with_overlay_test.mp4")
-overlay_video("./recording_data/replay_20250407_194351.mp4", "./recording_data/actions_20250407_194351.pt", "overlay_output/replay_with_overlay_test.mp4")
+overlay_video("./recording_data/replay_20250407_210153.mp4", "./recording_data/actions_20250407_210153.pt", "overlay_output/replay_with_overlay_test.mp4")
