@@ -5,6 +5,7 @@ from torchvision.io import read_video
 from oasis_library.utils import one_hot_actions, sigmoid_beta_schedule
 from tqdm import tqdm
 from einops import rearrange
+import numpy as np
 import random
 
 # Ensure CUDA is available
@@ -59,7 +60,11 @@ for epoch in range(num_epochs):
 
     # Randomly select segment starts for this epoch
     max_start = N - total_frames
-    segment_starts = [random.randint(0, max_start) for _ in range(num_segments_per_epoch)]
+    # Note that I want to bias towards selecting frames from the end of the video
+    # This is specifically for my training set since the end of every video contains the part where the player gets damaged/killed
+    weights = np.linspace(1, max_start + 1, max_start + 1) ** 2  # Quadratic bias
+    weights = weights / weights.sum()  # Normalize to get probabilities
+    segment_starts = np.random.choice(np.arange(max_start + 1), size=num_segments_per_epoch, p=weights).tolist()
 
     # Iterate over each segment
     for segment_start in tqdm(segment_starts, desc=f"Epoch {epoch + 1}/{num_epochs}", leave=False):
