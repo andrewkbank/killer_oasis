@@ -94,6 +94,10 @@ for epoch in range(num_epochs):
             w=W // vae.patch_size
         ).to('cpu')  # Move to CPU to save GPU memory
 
+        # Clean up segment-level inputs after encoding
+        del x_segment, actions_segment, x, x_flat, actions_curr
+        torch.cuda.empty_cache()
+        
         # Iterate over frames from n_prompt_frames to total_frames within the segment
         for i in range(n_prompt_frames, total_frames):
             x_input = x_encoded[:, :i + 1]  # Input frames up to current frame
