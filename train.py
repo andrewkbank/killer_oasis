@@ -12,13 +12,13 @@ import random
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 # Load DiT checkpoint
-ckpt = torch.load("oasis500m.pt", map_location = device, weights_only=True)
+ckpt = torch.load("oasis500m.pt", weights_only=True)
 model = DiT_models["DiT-S/2"]()
 model.load_state_dict(ckpt, strict=False)
 model = model.to(device).train()  # Set to training mode
 
 # Load VAE checkpoint
-vae_ckpt = torch.load("vit-l-20.pt", map_location = device, weights_only=True)
+vae_ckpt = torch.load("vit-l-20.pt", weights_only=True)
 vae = VAE_models["vit-l-20-shallow-encoder"]()
 vae.load_state_dict(vae_ckpt)
 vae = vae.to(device).eval()  # Set to evaluation mode
@@ -40,7 +40,7 @@ video_id = "20250407_210153"
 mp4_path = f"recording_data/replay_{video_id}.mp4"
 actions_path = f"recording_data/actions_{video_id}.pt"
 video = read_video(mp4_path, pts_unit="sec")[0].float() / 255  # Shape: (N, H, W, 3)
-actions = one_hot_actions(torch.load(actions_path, map_location=device, weights_only=False))  # Shape: (N, action_dim)
+actions = one_hot_actions(torch.load(actions_path, weights_only=False))  # Shape: (N, action_dim)
 
 # Total number of frames in the video
 N = video.shape[0]  # Adjusted since we removed the batch dimension
