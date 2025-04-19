@@ -1,5 +1,5 @@
 import torch
-from torch.cuda.amp import autocast, GradScaler
+from torch.amp import autocast, GradScaler
 from oasis_library.dit import DiT_models
 from oasis_library.vae import VAE_models
 from torchvision.io import read_video
