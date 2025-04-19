@@ -1,4 +1,5 @@
 import torch
+from torch.cuda.amp import autocast, GradScaler
 from oasis_library.dit import DiT_models
 from oasis_library.vae import VAE_models
 from torchvision.io import read_video
@@ -53,6 +54,9 @@ alphas_cumprod = rearrange(alphas_cumprod, "T -> T 1 1 1")
 
 # Optimizer
 optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4)
+
+# Scaler
+scaler = GradScaler()
 
 # Training loop
 for epoch in range(num_epochs):
@@ -166,13 +170,11 @@ for epoch in range(num_epochs):
 
             del x_curr
             torch.cuda.empty_cache()
-
-            # Model prediction
-            v = model(x_noisy, t, actions_curr_slice)
-
-            # Compute loss (only on the current frame)
-            loss = torch.nn.functional.mse_loss(v[:, -1:], noise)
-
+            with autocast('cuda'):
+                # Model prediction
+                v = model(x_noisy, t, actions_curr_slice)
+                # Compute loss (only on the current frame)
+                loss = torch.nn.functional.mse_loss(v[:, -1:], noise)
             del noise
 
             # Backpropagation and optimization
