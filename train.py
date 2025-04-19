@@ -95,9 +95,9 @@ for epoch in range(num_epochs):
         ).to('cpu')  # Move to CPU to save GPU memory
 
         # Clean up segment-level inputs after encoding
-        del x_segment, actions_segment, x, x_flat, actions_curr
+        del x_segment, actions_segment, x, x_flat
         torch.cuda.empty_cache()
-        
+
         # Iterate over frames from n_prompt_frames to total_frames within the segment
         for i in range(n_prompt_frames, total_frames):
             x_input = x_encoded[:, :i + 1]  # Input frames up to current frame
@@ -186,7 +186,7 @@ for epoch in range(num_epochs):
 
         # Clean up segment data
         x_encoded = x_encoded.to('cpu')
-        del x_encoded
+        del x_encoded, actions_curr
         torch.cuda.empty_cache()
 
     # Compute average loss for the epoch
