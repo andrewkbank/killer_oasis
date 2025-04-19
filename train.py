@@ -170,7 +170,7 @@ for epoch in range(num_epochs):
 
             del x_curr
             torch.cuda.empty_cache()
-            with autocast('cuda'):
+            with autocast(device_type="cuda"):
                 # Model prediction
                 v = model(x_noisy, t, actions_curr_slice)
                 # Compute loss (only on the current frame)
