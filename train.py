@@ -128,6 +128,7 @@ for epoch in range(num_epochs):
             t_next = torch.where(t_next < 0, t, t_next)
             t = torch.cat([t_ctx, t], dim=1)
             t_next = torch.cat([t_ctx, t_next], dim=1)
+            del t_ctx
 
             # Sliding window
             x_curr = x_input[:, start_frame:]
@@ -135,6 +136,10 @@ for epoch in range(num_epochs):
             t_next = t_next[:, start_frame:]
             actions_curr_slice = actions_input[:, start_frame:start_frame + x_curr.shape[1]]
             B, T_curr, C, H, W = x_curr.shape
+
+            # Move data back to CPU to free GPU memory
+            x_input = x_input.to('cpu')
+            del x_input, actions_input, start_frame, t_next
 
             # Add noise to context frames
             ctx_noise = torch.randn_like(x_curr[:, :-1])
@@ -145,6 +150,8 @@ for epoch in range(num_epochs):
                 (1 - alphas_cumprod[t[:, :-1]]).sqrt() * ctx_noise
             )
 
+            del ctx_noise
+
             # Add noise to the current frame
             noise = torch.randn_like(x_curr[:, -1:])
             noise = torch.clamp(noise, -noise_abs_max, +noise_abs_max)
@@ -153,11 +160,16 @@ for epoch in range(num_epochs):
                 (1 - alphas_cumprod[t[:, -1:]]).sqrt() * noise
             )
 
+            del x_curr
+            torch.cuda.empty_cache()
+
             # Model prediction
             v = model(x_noisy, t, actions_curr_slice)
 
             # Compute loss (only on the current frame)
             loss = torch.nn.functional.mse_loss(v[:, -1:], noise)
+
+            del noise
 
             # Backpropagation and optimization
             optimizer.zero_grad()
@@ -165,9 +177,7 @@ for epoch in range(num_epochs):
             optimizer.step()
 
             epoch_loss += loss.item()
-            # Move data back to CPU to free GPU memory
-            x_input = x_input.to('cpu')
-            del x_input
+            del x_noisy, t, actions_curr_slice, v, loss
             torch.cuda.empty_cache()
 
         # Clean up segment data
