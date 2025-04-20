@@ -54,31 +54,29 @@ scaler = GradScaler()
 data_dir = "training"
 video_files = sorted(glob.glob(os.path.join(data_dir, "replay_*.mp4")))
 
-for video_path in video_files:
-    video_id = os.path.basename(video_path).split("replay_")[1].split(".mp4")[0]
-    actions_path = os.path.join(data_dir, f"actions_{video_id}.pt")
+# Training loop
+for epoch in range(num_epochs):
+    epoch_loss = 0.0
+    total_steps = 0
 
-for video_path in video_files:
-    video_id = os.path.basename(video_path).split("replay_")[1].split(".mp4")[0]
-    actions_path = os.path.join(data_dir, f"actions_{video_id}.pt")
-    
-    if not os.path.exists(actions_path):
-        print(f"⚠️ Skipping {video_id}: missing actions file.")
-        continue
+    for video_path in video_files:
+        video_id = os.path.basename(video_path).split("replay_")[1].split(".mp4")[0]
+        actions_path = os.path.join(data_dir, f"actions_{video_id}.pt")
+        
+        if not os.path.exists(actions_path):
+            print(f"⚠️ Skipping {video_id}: missing actions file.")
+            continue
 
-    #print(f"\n🔁 Training on pair: {video_id}")
+        #print(f"\n🔁 Training on pair: {video_id}")
 
-    # Load video and actions
-    video = read_video(video_path, pts_unit="sec")[0].float() / 255
-    actions = one_hot_actions(torch.load(actions_path, map_location=device, weights_only=False))
+        # Load video and actions
+        video = read_video(video_path, pts_unit="sec")[0].float() / 255
+        actions = one_hot_actions(torch.load(actions_path, map_location=device, weights_only=False))
 
-    N = video.shape[0]
-    if N < total_frames:
-        print(f"⚠️ Skipping {video_id}: not enough frames ({N} < {total_frames})")
-        continue
-    # Training loop
-    for epoch in range(num_epochs):
-        epoch_loss = 0.0
+        N = video.shape[0]
+        if N < total_frames:
+            print(f"⚠️ Skipping {video_id}: not enough frames ({N} < {total_frames})")
+            continue
 
         # Randomly select segment starts for this epoch
         max_start = N - total_frames
@@ -204,6 +202,7 @@ for video_path in video_files:
                 optimizer.step()
 
                 epoch_loss += loss.item()
+                total_steps += 1
                 del x_noisy, t, actions_curr_slice, v, loss
                 torch.cuda.empty_cache()
 
@@ -212,9 +211,9 @@ for video_path in video_files:
             del x_encoded, actions_curr
             torch.cuda.empty_cache()
 
-        # Compute average loss for the epoch
-        avg_loss = epoch_loss / (num_segments_per_epoch * (total_frames - n_prompt_frames))
-        print(f"Epoch {epoch + 1}/{num_epochs} completed. Average Loss: {avg_loss:.4f}")
+    # Compute average loss for the epoch
+    avg_loss = epoch_loss / (num_segments_per_epoch * (total_frames - n_prompt_frames) * total_steps)
+    print(f"Epoch {epoch + 1}/{num_epochs} completed. Average Loss: {avg_loss:.4f}")
 
 # Save the trained model
 torch.save(model.state_dict(), 'finetuned_model1.pt')
