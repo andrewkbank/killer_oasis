@@ -59,7 +59,7 @@ for epoch in range(num_epochs):
     epoch_loss = 0.0
     total_steps = 0
 
-    for video_path in video_files:
+    for video_path in tqdm(video_files, desc=f"📁 Epoch {epoch + 1}: Processing videos", leave=True):
         video_id = os.path.basename(video_path).split("replay_")[1].split(".mp4")[0]
         actions_path = os.path.join(data_dir, f"actions_{video_id}.pt")
         
@@ -87,7 +87,7 @@ for epoch in range(num_epochs):
         segment_starts = np.random.choice(np.arange(max_start + 1), size=num_segments_per_epoch, p=weights).tolist()
 
         # Iterate over each segment
-        for segment_start in tqdm(segment_starts, desc=f"Epoch {epoch + 1}/{num_epochs}", leave=False):
+        for segment_start in segment_starts:
             # Get segment
             x_segment = video[segment_start:segment_start + total_frames].unsqueeze(0)  # Shape: (1, total_frames, H, W, 3)
             if x_segment.mean()<0.25: # We ignore video that is too dark
