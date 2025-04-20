@@ -38,16 +38,6 @@ n_prompt_frames = 8  # Number of prompt frames (context)
 num_epochs = 4
 num_segments_per_epoch = 10  # Number of segments to use in each epoch
 
-# Get input video and actions
-#video_id = "20250407_210153"
-#mp4_path = f"recording_data/replay_{video_id}.mp4"
-#actions_path = f"recording_data/actions_{video_id}.pt"
-#video = read_video(mp4_path, pts_unit="sec")[0].float() / 255  # Shape: (N, H, W, 3)
-#actions = one_hot_actions(torch.load(actions_path, weights_only=False))  # Shape: (N, action_dim)
-
-# Total number of frames in the video
-N = video.shape[0]  # Adjusted since we removed the batch dimension
-
 # Get alphas for noise scheduling
 betas = sigmoid_beta_schedule(max_noise_level).to(device)
 alphas = 1.0 - betas
